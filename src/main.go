@@ -28,7 +28,7 @@ func main() {
 	fmt.Println("Choose Destination Folder: ")
 	fmt.Scanln(&destinationPath)
 
-	fmt.Printf("Moving Images")
+	fmt.Printf("Moving Images! \n")
 	moveFiles(imageList, imageDir, destinationPath)
 
 	fmt.Println("----------------------")
