@@ -12,12 +12,29 @@
       version = "0.1.0";
 
       getLinuxGioBuildInputs = pkgs: with pkgs; [
-        gcc pkg-config
-        xorg.libX11 xorg.libXcursor xorg.libXrandr xorg.libXinerama xorg.libXi
-        xorg.libXfixes xorg.libXrender xorg.libXext xorg.libXft
-        fontconfig freetype harfbuzz
-        wayland libxkbcommon mesa libglvnd
-        vulkan-headers vulkan-loader gtk3
+        gcc 
+        pkg-config
+        xorg.libX11 
+        xorg.libXcursor 
+        xorg.libXrandr 
+        xorg.libXinerama 
+        xorg.libXi
+        xorg.libXfixes 
+        xorg.libXrender 
+        xorg.libXext 
+        xorg.libXft
+        fontconfig 
+        freetype 
+        harfbuzz
+        wayland 
+        libxkbcommon 
+        mesa 
+        libglvnd
+        vulkan-headers 
+        vulkan-loader 
+        gtk3
+        glib
+        gsettings-desktop-schemas
       ] ++ lib.optionals pkgs.stdenv.isLinux [
         alsa-lib udev
       ];
