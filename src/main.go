@@ -2,15 +2,75 @@ package main
 
 import (
 	"fmt"
-	"io"
+	"image/color"
 	"log"
 	"os"
-	"path/filepath"
 
-	"github.com/xuri/excelize/v2"
+	"gioui.org/app"
+	"gioui.org/layout"
+	"gioui.org/op"
+	"gioui.org/text"
+	"gioui.org/unit"
+	"gioui.org/widget"
+	"gioui.org/widget/material"
+
+	"github.com/sqweek/dialog"
 )
 
+type AppState struct {
+    theme   *material.Theme
+
+    openExcelButton  widget.Clickable
+    excelPath string
+    excelPathChan chan string
+    excelPathSelecte bool
+
+    openImageDirButton widget.Clickable
+    imageDirPath string
+    imageDirPathChan chan string
+    imageDirSelected bool
+
+    openDestFolderButton widget.Clickable
+    destPath string
+    destPathChan chan string
+    destPathSelected bool
+
+    moveImgsButton widget.Clickable
+    statusMessage string
+    longOpChannel chan string
+}
+
+func newAppState() *AppState{
+    return &AppState{
+        theme: material.NewTheme(),
+        
+        excelPath: "No Excel file selected",
+        excelPathChan: make(chan string, 1),
+
+        imageDirPath: "No image Directory selected",
+        imageDirPathChan: make(chan string, 1),
+
+        destPath: "No destination path selected",
+        destPathChan: make(chan string, 1),
+
+        statusMessage:  "Please select all paths",
+        longOpChannel: make(chan string, 1),
+
+    }
+}
+
 func main() {
+
+    go func ()  {
+        window := new(app.Window)
+        err := run(window)
+        if err != nil {
+            log.Fatal(err)
+        }
+        os.Exit(0)
+    }()
+    app.Main()
+
 	fmt.Println("Welcome to the Image Mover Util!")
 	fmt.Println("--------------------------------")
 
@@ -35,113 +95,178 @@ func main() {
 	fmt.Println("Thank you for using this utility")
 }
 
-func getImageList(path string) []string {
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		log.Fatalf("Invalid file path: %v", err)
-	}
+func run(window *app.Window) error {
+    var ops op.Ops
+    state := newAppState()
 
-	var sheet string
-	fmt.Println("Enter Sheet Name")
-	fmt.Scanln(&sheet)
+    for {
 
-	fmt.Println("Reading File")
-	file, err := excelize.OpenFile(absPath)
-	if err != nil {
-		log.Fatal(err)
-	}
+        select{
+        case path := <-state.excelPathChan:
+            if path == ""{
+                state.excelPath = "File selction cancelled or not file selected"
+            } else if len(path) > 7 && path[:7] == "Error: "{
+                state.excelPath = path
+            }else {
+                state.excelPath = path
+                state.statusMessage = "Excel file selected. Ready for next step"
+            }
+            window.Invalidate()
+        case path := <-state.imageDirPathChan:
+            state.imageDirSelected = false
+            if path == "" {
+                state.imageDirPath = "Directory selection cancelled "
+            } else if len(path) > 7 && path[:7] == "Error: "{
+                state.imageDirPath = path
+            } else{
+                state.imageDirPath = path
+                state.imageDirSelected = true
+                state.statusMessage  = "Image direcctory selected"
+            }
+        window.Invalidate()
+        case path := <-state.destPathChan:
+            state.destPathSelected = false
+            if path ==""{
+                state.destPath = "Destination path selection cancelled"
+            } else if len(path)> 7 && path[:7] == "Error: "{
+                state.destPath = path
+            } else {
+                state.destPath = path
+                state.destPathSelected = true
+                state.statusMessage = "Destination folder selected"
+            }
+        window.Invalidate()
+        case opStatus := <-state.longOpChannel:
+            state.statusMessage = opStatus
+            window.Invalidate()
+        default:
+        }
 
-	rows, err := file.GetRows(sheet)
-	if err != nil {
-		log.Fatal(err)
-	}
+        switch e := window.Event().(type) {
+        case app.DestroyEvent:
+            return e.Err
+        case app.FrameEvent:
+            gtx := app.NewContext(&ops, e)
 
-	var imageList []string
+            if state.openExcelButton.Clicked(gtx){
+                state.statusMessage= "Opening Excel file"
+                window.Invalidate()
+                go func() {
+                    filepath, err := dialog.File().Title("Select Excel File").Filter("Excel Files", "xlsx","xls").Load()
+                    handleDialogResult(filepath, err, state.excelPathChan, "Excel File Selection")
+                    state.excelPathSelecte = true
+                }()
+            }
 
-	fmt.Println("Reading Sheet")
-	fmt.Println("Files That will be Copied!")
-	fmt.Println("---------------------------------")
-	for i := 1; i < len(rows); i++ {
-		if len(rows[i]) > 0 {
-			imageList = append(imageList, rows[i][0])
-			fmt.Print(rows[i][0], "\n")
-		}
-	}
+            if state.openImageDirButton.Clicked(gtx){
+                state.statusMessage="Opening image directory"
+                window.Invalidate()
 
-	return imageList
+                go func(){
+
+                    dirPath, err := dialog.Directory().Title("Select img Directory").Browse()
+                    handleDialogResult(dirPath, err, state.imageDirPathChan, "Selecting Image Directory")
+                    state.imageDirSelected = true
+
+                }()
+            }
+            if state.openDestFolderButton.Clicked(gtx){
+                state.statusMessage="Opening Destination Folder"
+                window.Invalidate()
+
+                go func(){
+                    destPath, err := dialog.Directory().Title("Select Destination Folder").Browse()
+                    handleDialogResult(destPath, err, state.destPathChan, "Selecting Destination Folder")
+                    state.destPathSelected = true
+                }()
+            }
+
+            if state.moveImgsButton.Clicked(gtx){
+                if !state.excelPathSelecte || !state.imageDirSelected || ! state.destPathSelected{
+                    state.statusMessage = "Error: Please select all valid paths bevore moving images"
+                } else{
+                    state.statusMessage = "Proccessing... Getting image list..."
+                    window.Invalidate()
+
+                    go func(excelP, imgDirP, destP string){
+                        imageList := getImageList(excelP)
+                        if imageList == nil {
+                            state.longOpChannel<- "Error: Could not get image list"
+                            return
+                        }
+                        if len(imageList) == 0{
+                            state.longOpChannel<-"No image references found in the Excel File"
+                            return
+                        }
+                        moveFiles(imageList, imgDirP, destP)
+                    }(state.excelPath, state.imageDirPath, state.destPath)
+                }
+            }
+                layout.Flex{Axis: layout.Vertical, Spacing: layout.SpaceAround, Alignment: layout.Start}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					title := material.H4(state.theme, "Image Mover Utility")
+					title.Color = color.NRGBA{R: 0, G: 80, B: 127, A: 255}
+					title.Alignment = text.Middle
+					return layout.Inset{Top: unit.Dp(10), Bottom: unit.Dp(10)}.Layout(gtx, title.Layout)
+				}),
+				layout.Rigid(rowWithLabelAndButton(state.theme, "1. Excel File:", state.excelPath, &state.openExcelButton, "Select...")),
+				layout.Rigid(layout.Spacer{Height: unit.Dp(15)}.Layout),
+				layout.Rigid(rowWithLabelAndButton(state.theme, "2. Image Directory:", state.imageDirPath, &state.openImageDirButton, "Select...")),
+				layout.Rigid(layout.Spacer{Height: unit.Dp(15)}.Layout),
+                layout.Rigid(rowWithLabelAndButton(state.theme, "3. Destination Direcctory", state.destPath, &state.openDestFolderButton, "Select...")),
+                layout.Rigid(layout.Spacer{Height: unit.Dp(25)}.Layout),
+                layout.Rigid(func(gtx layout.Context) layout.Dimensions{
+                    btn:= material.Button(state.theme, &state.moveImgsButton, "Move Images")
+                    return layout.Center.Layout(gtx, btn.Layout)
+                }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					statusLabel := material.Body1(state.theme, state.statusMessage)
+					statusLabel.Alignment = text.Middle
+					return layout.Center.Layout(gtx, statusLabel.Layout)
+				}),
+			)			// --- End UI Layout ---
+
+			e.Frame(gtx.Ops)
+        }
+
+    }
 }
 
-func moveFiles(imageList []string, imageDir string, destinationPath string) {
-	absImageDir, err := filepath.Abs(imageDir)
-	if err != nil {
-		log.Fatalf("Error getting absolute Image path: %v", err)
-	}
 
-	absDestination, err := filepath.Abs(destinationPath)
-	if err != nil {
-		log.Fatalf("Error getting absolute Destination path: %v", err)
-	}
+func handleDialogResult(pathOrDir string, err error, resultChan chan string, logContext string){
+    if err != nil{
+        if err == dialog.ErrCancelled {
+            log.Println(logContext, "cancelled")
+            resultChan <- ""
+        } else {
+            log.Println("Error during ", logContext, ":", err)
+            resultChan <- "Error: " + err.Error()
+        }
+        return
+    }
+    if pathOrDir == ""{
+        log.Println(logContext, "returned empty path with no error")
+        resultChan <- ""
+        return
+    }
+    log.Println(logContext, "selected: ", pathOrDir)
+    resultChan <- pathOrDir
+}
 
-	if _, err := os.Stat(absDestination); os.IsNotExist(err) {
-		err = os.MkdirAll(absDestination, os.ModePerm)
-		if err != nil {
-			log.Fatalf("Error Creating destination directory: %v", err)
-		}
-	}
-
-	foundFiles := make(map[string]bool)
-	notFoundFiles := make([]string, 0)
-
-	err = filepath.Walk(absImageDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		for _, imgName := range imageList {
-			if filepath.Base(path) == imgName && !foundFiles[imgName] {
-				destPath := filepath.Join(absDestination, imgName)
-
-				//Copy File
-
-				sourceFile, err := os.Open(path)
-				if err != nil {
-					fmt.Printf("Error opening source file %s: %v\n", imgName, err)
-					continue
-				}
-				defer sourceFile.Close()
-
-				destFile, err := os.Create(destPath)
-				if err != nil {
-					fmt.Printf("Error creating destination file %s: %v\n", imgName, err)
-					continue
-				}
-				defer destFile.Close()
-
-				_, err = io.Copy(destFile, sourceFile)
-				if err != nil {
-					fmt.Printf("Error Copying file %s: %v\n", imgName, err)
-					continue
-				}
-				fmt.Printf("Copied: %s (from %s)\n", imgName, path)
-				foundFiles[imgName] = true
-				break
-			}
-		}
-		return nil
-	})
-	for _, imgName := range imageList {
-		if !foundFiles[imgName] {
-			notFoundFiles = append(notFoundFiles, imgName)
-		}
-	}
-	if len(notFoundFiles) > 0 {
-		fmt.Println("\n Files not found")
-		for _, file := range notFoundFiles {
-			fmt.Println(file)
-		}
-	}
-
-	if err != nil {
-		log.Fatalf("Error While walking through directories: %v", err)
+func rowWithLabelAndButton(th *material.Theme, descText, pathText string, btn *widget.Clickable, btnText string) layout.Widget {
+	return func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Vertical, Alignment: layout.Start}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return material.Body1(th, descText).Layout(gtx)
+			}),
+			layout.Rigid(layout.Spacer{Height: unit.Dp(2)}.Layout),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{Alignment: layout.Baseline}.Layout(gtx,
+					layout.Flexed(1, material.Body2(th, pathText).Layout), // Path text takes available space
+					layout.Rigid(layout.Spacer{Width: unit.Dp(10)}.Layout),
+					layout.Rigid(material.Button(th, btn, btnText).Layout),
+				)
+			}),
+		)
 	}
 }
