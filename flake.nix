@@ -16,7 +16,7 @@
         xorg.libX11 xorg.libXcursor xorg.libXrandr xorg.libXinerama xorg.libXi
         xorg.libXfixes xorg.libXrender xorg.libXext xorg.libXft
         fontconfig freetype harfbuzz
-        wayland libxkbcommon mesa
+        wayland libxkbcommon mesa libglvnd
         vulkan-headers vulkan-loader
       ] ++ lib.optionals pkgs.stdenv.isLinux [
         alsa-lib udev
