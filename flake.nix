@@ -19,7 +19,7 @@
 
         # Gio graphics stack (EGL/OpenGL/Vulkan)
         libglvnd          # For egl.pc, gl.pc etc.
-        mesa.dev          # Mesa drivers and dev files
+        mesa          # Mesa drivers and dev files
         vulkan-headers    # For Vulkan API
         vulkan-loader     # For Vulkan ICD loading
 
