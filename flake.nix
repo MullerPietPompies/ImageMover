@@ -17,7 +17,7 @@
         xorg.libXfixes xorg.libXrender xorg.libXext xorg.libXft
         fontconfig freetype harfbuzz
         wayland libxkbcommon mesa libglvnd
-        vulkan-headers vulkan-loader
+        vulkan-headers vulkan-loader gtk3
       ] ++ lib.optionals pkgs.stdenv.isLinux [
         alsa-lib udev
       ];
