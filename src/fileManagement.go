@@ -43,6 +43,7 @@ func getImageList(path string) []string {
 
 	return imageList
 }
+
 func moveFiles(imageList []string, imageDir string, destinationPath string) {
 	absImageDir, err := filepath.Abs(imageDir)
 	if err != nil {
