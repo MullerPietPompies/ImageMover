@@ -2,15 +2,50 @@ package main
 
 import (
 	"fmt"
-	"io"
+	"image"
+	"image/color"
 	"log"
 	"os"
-	"path/filepath"
 
-	"github.com/xuri/excelize/v2"
+	"gioui.org/app"
+	"gioui.org/op"
+	"gioui.org/op/clip"
+	"gioui.org/op/paint"
+	"gioui.org/text"
+	"gioui.org/widget"
+	"gioui.org/widget/material"
 )
 
+type AppState struct {
+    theme   *material.Theme
+    openExcelutton  widget.Clickable
+    excelPath string
+    excelPathChan chan string
+    statusMessage string
+}
+
+func newAppState() *AppState{
+    return &AppState{
+        theme: material.NewTheme(),
+        excelPath: "No Excel file selected",
+        excelPathChan: make(chan string, 1),
+        statusMessage: "Click Button to select excel file",
+
+    }
+}
+
 func main() {
+
+    go func ()  {
+        window := new(app.Window)
+        err := run(window)
+        if err != nil {
+            log.Fatal(err)
+        }
+        os.Exit(0)
+    }()
+    app.Main()
+
 	fmt.Println("Welcome to the Image Mover Util!")
 	fmt.Println("--------------------------------")
 
@@ -35,113 +70,37 @@ func main() {
 	fmt.Println("Thank you for using this utility")
 }
 
-func getImageList(path string) []string {
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		log.Fatalf("Invalid file path: %v", err)
-	}
+func run(window *app.Window) error {
+    theme := material.NewTheme()
+    var ops op.Ops
 
-	var sheet string
-	fmt.Println("Enter Sheet Name")
-	fmt.Scanln(&sheet)
-
-	fmt.Println("Reading File")
-	file, err := excelize.OpenFile(absPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	rows, err := file.GetRows(sheet)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var imageList []string
-
-	fmt.Println("Reading Sheet")
-	fmt.Println("Files That will be Copied!")
-	fmt.Println("---------------------------------")
-	for i := 1; i < len(rows); i++ {
-		if len(rows[i]) > 0 {
-			imageList = append(imageList, rows[i][0])
-			fmt.Print(rows[i][0], "\n")
-		}
-	}
-
-	return imageList
+    for {
+        switch e := window.Event().(type){
+        case app.DestroyEvent:
+            return e.Err
+        case app.FrameEvent:
+            gtx := app.NewContext(&ops, e)
+            title := material.H1(theme, "Hello there")
+            maroon := color.NRGBA{R: 127, G: 0, B: 0, A: 255}
+            title.Color = maroon
+            title.Alignment = text.Middle
+            
+            title.Layout(gtx)
+            drawRect(&ops)
+            e.Frame(gtx.Ops)
+            
+        
+        }
+    }
 }
 
-func moveFiles(imageList []string, imageDir string, destinationPath string) {
-	absImageDir, err := filepath.Abs(imageDir)
-	if err != nil {
-		log.Fatalf("Error getting absolute Image path: %v", err)
-	}
+func drawRect(ops *op.Ops){
+    defer clip.Rect{Max: image.Pt(100,100)}.Push(ops).Pop()
+    paint.ColorOp{Color: color.NRGBA{R: 0x80, A: 0xFF}}.Add(ops)
+    paint.PaintOp{}.Add(ops)
+}
 
-	absDestination, err := filepath.Abs(destinationPath)
-	if err != nil {
-		log.Fatalf("Error getting absolute Destination path: %v", err)
-	}
-
-	if _, err := os.Stat(absDestination); os.IsNotExist(err) {
-		err = os.MkdirAll(absDestination, os.ModePerm)
-		if err != nil {
-			log.Fatalf("Error Creating destination directory: %v", err)
-		}
-	}
-
-	foundFiles := make(map[string]bool)
-	notFoundFiles := make([]string, 0)
-
-	err = filepath.Walk(absImageDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		for _, imgName := range imageList {
-			if filepath.Base(path) == imgName && !foundFiles[imgName] {
-				destPath := filepath.Join(absDestination, imgName)
-
-				//Copy File
-
-				sourceFile, err := os.Open(path)
-				if err != nil {
-					fmt.Printf("Error opening source file %s: %v\n", imgName, err)
-					continue
-				}
-				defer sourceFile.Close()
-
-				destFile, err := os.Create(destPath)
-				if err != nil {
-					fmt.Printf("Error creating destination file %s: %v\n", imgName, err)
-					continue
-				}
-				defer destFile.Close()
-
-				_, err = io.Copy(destFile, sourceFile)
-				if err != nil {
-					fmt.Printf("Error Copying file %s: %v\n", imgName, err)
-					continue
-				}
-				fmt.Printf("Copied: %s (from %s)\n", imgName, path)
-				foundFiles[imgName] = true
-				break
-			}
-		}
-		return nil
-	})
-	for _, imgName := range imageList {
-		if !foundFiles[imgName] {
-			notFoundFiles = append(notFoundFiles, imgName)
-		}
-	}
-	if len(notFoundFiles) > 0 {
-		fmt.Println("\n Files not found")
-		for _, file := range notFoundFiles {
-			fmt.Println(file)
-		}
-	}
-
-	if err != nil {
-		log.Fatalf("Error While walking through directories: %v", err)
-	}
+func drawRedRect10PixelsRight(ops *op.Ops) {
+	defer op.Offset(image.Pt(100, 0)).Push(ops).Pop()
+	drawRect(ops)
 }
