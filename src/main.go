@@ -20,10 +20,10 @@ import (
 type AppState struct {
     theme   *material.Theme
 
-    openExcelButton  widget.Clickable
-    excelPath string
-    excelPathChan chan string
-    excelPathSelecte bool
+    openBlueprintFolder  widget.Clickable
+    blueprintPath string
+    blueprintPathChan chan string
+    blueprintSelected bool
 
     openImageDirButton widget.Clickable
     imageDirPath string
@@ -44,8 +44,8 @@ func newAppState() *AppState{
     return &AppState{
         theme: material.NewTheme(),
         
-        excelPath: "No Excel file selected",
-        excelPathChan: make(chan string, 1),
+        blueprintPath: "No Blueprint selected",
+        blueprintPathChan: make(chan string, 1),
 
         imageDirPath: "No image Directory selected",
         imageDirPathChan: make(chan string, 1),
@@ -102,14 +102,14 @@ func run(window *app.Window) error {
     for {
 
         select{
-        case path := <-state.excelPathChan:
+        case path := <-state.blueprintPathChan:
             if path == ""{
-                state.excelPath = "File selction cancelled or not file selected"
+                state.blueprintPath = "File selction cancelled or not file selected"
             } else if len(path) > 7 && path[:7] == "Error: "{
-                state.excelPath = path
+                state.blueprintPath = path
             }else {
-                state.excelPath = path
-                state.statusMessage = "Excel file selected. Ready for next step"
+                state.blueprintPath = path
+                state.statusMessage = "Blueprint folder selected. Ready for next step"
             }
             window.Invalidate()
         case path := <-state.imageDirPathChan:
@@ -148,13 +148,13 @@ func run(window *app.Window) error {
         case app.FrameEvent:
             gtx := app.NewContext(&ops, e)
 
-            if state.openExcelButton.Clicked(gtx){
-                state.statusMessage= "Opening Excel file"
+            if state.openBlueprintFolder.Clicked(gtx){
+                state.statusMessage= "Opening blueprint directory"
                 window.Invalidate()
                 go func() {
-                    filepath, err := dialog.File().Title("Select Excel File").Filter("Excel Files", "xlsx","xls").Load()
-                    handleDialogResult(filepath, err, state.excelPathChan, "Excel File Selection")
-                    state.excelPathSelecte = true
+                    filepath, err := dialog.Directory().Title("Select Blueprint Directory").Browse()
+                    handleDialogResult(filepath, err, state.blueprintPathChan, "Blueprint Folder Selection")
+                    state.blueprintSelected = true
                 }()
             }
 
@@ -182,24 +182,15 @@ func run(window *app.Window) error {
             }
 
             if state.moveImgsButton.Clicked(gtx){
-                if !state.excelPathSelecte || !state.imageDirSelected || ! state.destPathSelected{
+                if !state.blueprintSelected || !state.imageDirSelected || ! state.destPathSelected{
                     state.statusMessage = "Error: Please select all valid paths bevore moving images"
                 } else{
-                    state.statusMessage = "Proccessing... Getting image list..."
+                    state.statusMessage = "Proccessing... Finding files"
                     window.Invalidate()
 
-                    go func(excelP, imgDirP, destP string){
-                        imageList := getImageList(excelP)
-                        if imageList == nil {
-                            state.longOpChannel<- "Error: Could not get image list"
-                            return
-                        }
-                        if len(imageList) == 0{
-                            state.longOpChannel<-"No image references found in the Excel File"
-                            return
-                        }
-                        moveFiles(imageList, imgDirP, destP)
-                    }(state.excelPath, state.imageDirPath, state.destPath)
+                    go func(blueprint, imgDirP, destP string){
+                        replicateStructureAndCopy(blueprint, imgDirP, destP)
+                    }(state.blueprintPath, state.imageDirPath, state.destPath)
                 }
             }
                 layout.Flex{Axis: layout.Vertical, Spacing: layout.SpaceAround, Alignment: layout.Start}.Layout(gtx,
@@ -209,7 +200,7 @@ func run(window *app.Window) error {
 					title.Alignment = text.Middle
 					return layout.Inset{Top: unit.Dp(10), Bottom: unit.Dp(10)}.Layout(gtx, title.Layout)
 				}),
-				layout.Rigid(rowWithLabelAndButton(state.theme, "1. Excel File:", state.excelPath, &state.openExcelButton, "Select...")),
+				layout.Rigid(rowWithLabelAndButton(state.theme, "1. Blueprint Directory:", state.blueprintPath, &state.openBlueprintFolder, "Select...")),
 				layout.Rigid(layout.Spacer{Height: unit.Dp(15)}.Layout),
 				layout.Rigid(rowWithLabelAndButton(state.theme, "2. Image Directory:", state.imageDirPath, &state.openImageDirButton, "Select...")),
 				layout.Rigid(layout.Spacer{Height: unit.Dp(15)}.Layout),
