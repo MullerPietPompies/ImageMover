@@ -189,7 +189,7 @@ func run(window *app.Window) error {
                     window.Invalidate()
 
                     go func(blueprint, imgDirP, destP string){
-                        replicateStructureAndCopy(blueprint, imgDirP, destP)
+                        replicateBlueprintFromSource(blueprint, imgDirP, destP)
                     }(state.blueprintPath, state.imageDirPath, state.destPath)
                 }
             }
