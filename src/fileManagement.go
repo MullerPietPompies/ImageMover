@@ -195,82 +195,95 @@ func copyFile(src, dst string) error {
 	return os.Chmod(dst, srcInfo.Mode())
 }
 
-func replicateStructureAndCopy(blueprintDir, sourceDir, destinationDir string) error {
-    fmt.Printf("Using bluprint from: %s\n", blueprintDir)
-    fmt.Printf("Sourcing files from: %s\n", sourceDir)
-    fmt.Printf("Outputing to: %s\n", destinationDir)
-    fmt.Println("------------------------------------")
+func replicateBlueprintFromSource(blueprintDir, sourceDir, destinationDir string) error {
+	// --- Phase 1: Index all files in the source directory for fast lookup ---
+	fmt.Println("--- Phase 1: Indexing all files in the source directory... ---")
+	sourceFileIndex := make(map[string]string) // Map of filename -> full path
 
+	walkSourceErr := filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		// We only care about files, not directories
+		if !info.IsDir() {
+			// Add the file to our index. If a filename is duplicated in the source,
+			// the last one found will be used.
+			sourceFileIndex[info.Name()] = path
+		}
+		return nil
+	})
 
-    // Step 1 validate blue print and sources
+	if walkSourceErr != nil {
+		return fmt.Errorf("error indexing source directory '%s': %w", sourceDir, walkSourceErr)
+	}
+	fmt.Printf("Found and indexed %d unique filenames in the source.\n", len(sourceFileIndex))
 
-    for _, path := range []string{blueprintDir, sourceDir}{
-        info, err := os.Stat(path)
+	// --- Phase 2: Walk the blueprint, find matches in our index, and copy ---
+	fmt.Println("\n--- Phase 2: Processing blueprint and copying files... ---")
+	var copiedCount int
+	var notFoundInSource []string
 
-        if os.IsNotExist(err){
-            return fmt.Errorf("required directory does not exist: %s", path)
+	walkBlueprintErr := filepath.Walk(blueprintDir, func(blueprintPath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		// We only use files from the blueprint as our guide
+		if info.IsDir() {
+			return nil
+		}
+
+		fileName := info.Name()
+
+		// Look for this filename in our source index
+		sourcePath, found := sourceFileIndex[fileName]
+
+		if !found {
+			// The file from the blueprint doesn't exist anywhere in the source directory
+			log.Printf("SKIPPED: File '%s' from blueprint not found in source index.\n", fileName)
+			notFoundInSource = append(notFoundInSource, fileName)
+			return nil
+		}
+
+		// --- We found a match, now let's construct the destination path ---
+		// Get the relative path of the file from the root of the blueprint directory
+        relativePath, err := filepath.Rel(blueprintDir, blueprintPath)
+        if err != nil {
+            return fmt.Errorf("could not determine relative path for %s:%w", blueprintPath, err)
         }
-        if !info.IsDir() {
-            return fmt.Errorf("Path is not a directory: %s", path)
+
+        destinationPath := filepath.Join(destinationDir,relativePath)
+
+        if err:= os.MkdirAll(filepath.Dir(destinationPath), os.ModePerm); err!= nil{
+            return fmt.Errorf("Could not create sub directory %s: %w", filepath.Dir(destinationPath), err) 
         }
-    }
-
-    var notFoundFiles []string
-    var copiedCount int
 
 
-    // Step 2 walk the folder structure and walk the file names
+		// --- Copy the file ---
+		fmt.Printf("COPYING: %s  ->  %s\n", sourcePath, destinationPath)
+		if err := copyFile(sourcePath, destinationPath); err != nil {
+			log.Printf("ERROR: Failed to copy file %s: %v", fileName, err)
+		} else {
+			copiedCount++
+		}
 
-    walkErr := filepath.Walk(blueprintDir, func(blueprintFilePath string, info os.FileInfo, err error) error{
-        if err != nil{
-            return err   
-        }
-        if info.IsDir() {
-            return nil
-        }
-        fileName := info.Name()
-        sourceFilePath := filepath.Join(sourceDir, fileName)  
+		return nil
+	})
 
-        if _,err := os.Stat(sourceFilePath); os.IsNotExist(err){
-            log.Printf("SKIPPED: File '%s' not found in  source directory '%s'. \n", fileName, sourceDir)
-            notFoundFiles = append(notFoundFiles, fileName)
-            return nil
-        }
-        relativePath, err := filepath.Rel(blueprintDir, blueprintFilePath)
-        if err != nil{ 
-            fmt.Errorf("could not determine relative path for %s: %w", blueprintFilePath, err) 
-        } 
+	if walkBlueprintErr != nil {
+		return fmt.Errorf("error processing blueprint directory '%s': %w", blueprintDir, walkBlueprintErr)
+	}
 
-        destinationFilePath:= filepath.Join(destinationDir, relativePath)
-        // Create destination sub directory
-        destinationSubDir := filepath.Dir(destinationFilePath)
-        if err:= os.MkdirAll(destinationSubDir, os.ModePerm); err != nil{
-            return fmt.Errorf("Could not create destination sub directory %s:%w", destinationSubDir, err)
-        }
-        fmt.Printf("COPYING: %s -> %s\n", sourceFilePath, destinationFilePath)  
-
-        if err := copyFile(sourceFilePath, destinationFilePath); err != nil{
-            log.Printf("ERROR: failed to copy %s:%v")
-        }else{
-            copiedCount++
-        }
-        return nil
-    })
-    if walkErr != nil{
-        return fmt.Errorf("error walking blueprint directory: ", walkErr)
-    }
-
-    fmt.Println("\n----------------------")
+	// --- Final Summary ---
+	fmt.Println("\n----------------------")
 	fmt.Println("Operation Completed.")
 	fmt.Printf("Successfully copied %d files.\n", copiedCount)
 
-	if len(notFoundFiles) > 0 {
+	if len(notFoundInSource) > 0 {
 		fmt.Println("\nThe following files from the blueprint were NOT found in the source directory:")
-		for _, file := range notFoundFiles {
+		for _, file := range notFoundInSource {
 			fmt.Printf("- %s\n", file)
 		}
 	}
 
-
-    return nil
+	return nil
 }
