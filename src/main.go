@@ -191,6 +191,7 @@ func run(window *app.Window) error {
                     go func(blueprint, imgDirP, destP string){
                         replicateBlueprintFromSource(blueprint, imgDirP, destP)
                     }(state.blueprintPath, state.imageDirPath, state.destPath)
+                    state.statusMessage = "Finished!!"
                 }
             }
                 layout.Flex{Axis: layout.Vertical, Spacing: layout.SpaceAround, Alignment: layout.Start}.Layout(gtx,
