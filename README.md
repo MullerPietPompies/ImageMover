@@ -1,7 +1,7 @@
 # File Mover Utility
 
 ## Purpose 
-I was approached by my father with a proplem his company faces when working with images and files. For context the company uses airial drone photography and AI to count game and other animals. As the model processes the the images to identify game the location data caputred by the drone gets lost. This small utility uses the file structure produced by the Computer Vision Model and duplicates that same file structure but replacing each image produced with the corresponding original image from the drone. Thy use the original images with the location data to plot it on the map of the particular farm or park thats being counted so the client can see where each of the animals were located on the property
+I was approached by my father with a proplem his company faces when working with images and files. For context the company uses airial drone photography and AI to count game and other animals. As the model processes the the images to identify game the location data caputred by the drone gets lost. This small utility uses the file structure produced by the Computer Vision Model and duplicates that same file structure but replacing each image produced with the corresponding original image from the drone. The original images with the location data is used to plot it on the map of the particular farm or park thats being counted so the client can see where each of the animals were located on the property
 
 ## How it works
 - It takes in a `blueprint` file path.
