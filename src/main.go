@@ -9,12 +9,18 @@ import (
 	"gioui.org/app"
 	"gioui.org/layout"
 	"gioui.org/op"
+	"gioui.org/op/paint"
 	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
 	"github.com/sqweek/dialog"
+)
+
+var (
+    darkTheme *material.Theme
+    lightTheme *material.Theme
 )
 
 type AppState struct {
@@ -39,6 +45,9 @@ type AppState struct {
     statusMessage string
     longOpChannel chan string
 
+    themeToggle widget.Clickable
+    darkMode bool
+
 }
 
 func newAppState() *AppState{
@@ -56,6 +65,8 @@ func newAppState() *AppState{
 
         statusMessage:  "Please select all paths",
         longOpChannel: make(chan string, 1),
+
+        darkMode: false,
     }
 }
 
@@ -63,6 +74,7 @@ func main() {
 
     go func ()  {
         window := new(app.Window)
+
         err := run(window)
         if err != nil {
             log.Fatal(err)
@@ -99,6 +111,15 @@ func run(window *app.Window) error {
     var ops op.Ops
     state := newAppState()
 
+    lightTheme = material.NewTheme()
+    darkTheme = material.NewTheme()
+    darkTheme.Palette = material.Palette{
+        Bg:     color.NRGBA{R: 0x18, G: 0x18, B: 0x18, A: 0xFF},
+        Fg:     color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}, 
+        ContrastBg: color.NRGBA{R: 0x30, G: 0x30, B: 0x30, A: 0xFF},
+        ContrastFg: color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF},
+    }
+    
     for {
 
         select{
@@ -147,6 +168,16 @@ func run(window *app.Window) error {
             return e.Err
         case app.FrameEvent:
             gtx := app.NewContext(&ops, e)
+            
+            if state.themeToggle.Clicked(gtx) {
+                state.darkMode  = !state.darkMode
+            }
+
+            th := lightTheme
+
+            if state.darkMode {
+                th = darkTheme
+            }
 
             if state.openBlueprintFolder.Clicked(gtx){
                 state.statusMessage= "Opening blueprint directory"
@@ -195,28 +226,37 @@ func run(window *app.Window) error {
                     state.statusMessage = "Moving Images";
                 }
             }
+            
+                bg := th.Bg
+                paint.Fill(gtx.Ops, bg)
+            
                 layout.Flex{Axis: layout.Vertical, Spacing: layout.SpaceAround, Alignment: layout.Start}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					title := material.H4(state.theme, "Image Mover Utility")
+					title := material.H4(th, "Image Mover Utility")
 					title.Color = color.NRGBA{R: 0, G: 80, B: 127, A: 255}
 					title.Alignment = text.Middle
 					return layout.Inset{Top: unit.Dp(10), Bottom: unit.Dp(10)}.Layout(gtx, title.Layout)
 				}),
-				layout.Rigid(rowWithLabelAndButton(state.theme, "1. Blueprint Directory:", state.blueprintPath, &state.openBlueprintFolder, "Select...")),
+				layout.Rigid(rowWithLabelAndButton(th, "1. Blueprint Directory:", state.blueprintPath, &state.openBlueprintFolder, "Select...")),
 				layout.Rigid(layout.Spacer{Height: unit.Dp(15)}.Layout),
-				layout.Rigid(rowWithLabelAndButton(state.theme, "2. Image Directory:", state.imageDirPath, &state.openImageDirButton, "Select...")),
+				layout.Rigid(rowWithLabelAndButton(th, "2. Image Directory:", state.imageDirPath, &state.openImageDirButton, "Select...")),
 				layout.Rigid(layout.Spacer{Height: unit.Dp(15)}.Layout),
-                layout.Rigid(rowWithLabelAndButton(state.theme, "3. Destination Direcctory", state.destPath, &state.openDestFolderButton, "Select...")),
+                layout.Rigid(rowWithLabelAndButton(th, "3. Destination Direcctory", state.destPath, &state.openDestFolderButton, "Select...")),
                 layout.Rigid(layout.Spacer{Height: unit.Dp(25)}.Layout),
                 layout.Rigid(func(gtx layout.Context) layout.Dimensions{
-                    btn:= material.Button(state.theme, &state.moveImgsButton, "Move Images")
+                    btn:= material.Button(th, &state.moveImgsButton, "Move Images")
                     return layout.Center.Layout(gtx, btn.Layout)
                 }),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					statusLabel := material.Body1(state.theme, state.statusMessage)
+					statusLabel := material.Body1(th, state.statusMessage)
 					statusLabel.Alignment = text.Middle
 					return layout.Center.Layout(gtx, statusLabel.Layout)
 				}),
+                layout.Rigid(func(gtx layout.Context) layout.Dimensions{
+                    btn:= material.Button(th, &state.themeToggle, "Theme")
+                    return layout.Center.Layout(gtx, btn.Layout)
+                }),
+
 			)			// --- End UI Layout ---
 
 			e.Frame(gtx.Ops)
