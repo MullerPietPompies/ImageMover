@@ -38,6 +38,7 @@ type AppState struct {
     moveImgsButton widget.Clickable
     statusMessage string
     longOpChannel chan string
+
 }
 
 func newAppState() *AppState{
@@ -55,7 +56,6 @@ func newAppState() *AppState{
 
         statusMessage:  "Please select all paths",
         longOpChannel: make(chan string, 1),
-
     }
 }
 
@@ -190,8 +190,9 @@ func run(window *app.Window) error {
 
                     go func(blueprint, imgDirP, destP string){
                         replicateBlueprintFromSource(blueprint, imgDirP, destP)
+                        state.statusMessage = "Finished!"
                     }(state.blueprintPath, state.imageDirPath, state.destPath)
-                    state.statusMessage = "Finished!!"
+                    state.statusMessage = "Moving Images";
                 }
             }
                 layout.Flex{Axis: layout.Vertical, Spacing: layout.SpaceAround, Alignment: layout.Start}.Layout(gtx,
